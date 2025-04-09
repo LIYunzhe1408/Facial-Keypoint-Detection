@@ -18,7 +18,23 @@ class SimpleNet(nn.Module):
         self.dropout1 = nn.Dropout(p=0.1)
 
         # TODO: add more layers
+        self.conv2 = nn.Conv2d(32, 64, 3)       # 64 x 108 x 108
+        self.bn2 = nn.BatchNorm2d(64)
+        self.pool2 = nn.MaxPool2d(2, 2)         # 64 x 54 x 54
+        self.dropout2 = nn.Dropout(p=0.2)
 
+        self.conv3 = nn.Conv2d(64, 128, 3)      # 128 x 52 x 52
+        self.bn3 = nn.BatchNorm2d(128)
+        self.pool3 = nn.MaxPool2d(2, 2)         # 128 x 26 x 26
+        self.dropout3 = nn.Dropout(p=0.3)
+
+        self.conv4 = nn.Conv2d(128, 256, 3)     # 256 x 24 x 24
+        self.bn4 = nn.BatchNorm2d(256)
+        self.pool4 = nn.MaxPool2d(2, 2)         # 256 x 12 x 12
+        self.dropout4 = nn.Dropout(p=0.4)
+
+        self.fc1 = nn.Linear(256 * 12 * 12, 1000)
+        self.fc2 = nn.Linear(1000, 1000)
         self.fc3 = nn.Linear(1000, 136)
 
         I.xavier_uniform_(self.fc1.weight.data)
@@ -28,6 +44,23 @@ class SimpleNet(nn.Module):
     def forward(self, x):
         
         # TODO: implement forward pass
+        x = self.pool1(nn.ReLU()(self.bn1(self.conv1(x))))
+        x = self.dropout1(x)
+
+        x = self.pool2(nn.ReLU()(self.bn2(self.conv2(x))))
+        x = self.dropout2(x)
+
+        x = self.pool3(nn.ReLU()(self.bn3(self.conv3(x))))
+        x = self.dropout3(x)
+
+        x = self.pool4(nn.ReLU()(self.bn4(self.conv4(x))))
+        x = self.dropout4(x)
+
+        x = x.view(x.size(0), -1)
+
+        x = nn.ReLU()(self.fc1(x))
+        x = nn.ReLU()(self.fc2(x))
+        x = self.fc3(x)
 
         return x
 
