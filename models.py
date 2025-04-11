@@ -78,6 +78,17 @@ class Resnet18(nn.Module):
         x = self.resnet18(x)
         return x
 
+class Resnet34(nn.Module):
+    def __init__(self):
+        super(Resnet34, self).__init__()
+        self.resnet34 = models.resnet34(pretrained=True)
+        n_inputs = self.resnet34.fc.in_features
+        self.resnet34.fc = nn.Linear(n_inputs, 136)
+
+    def forward(self, x):
+        x = self.resnet34(x)
+        return x
+
 
 class Resnet18Grayscale(nn.Module):
     def __init__(self):
@@ -91,6 +102,31 @@ class Resnet18Grayscale(nn.Module):
 
         # Copy all layers except the first conv and fc
         self.backbone = nn.Sequential(*list(resnet18.children())[1:-1])
+
+        # Fully connected layer for regression
+        self.fc = nn.Linear(512, 136)
+
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.backbone(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
+
+
+class Resnet34Grayscale(nn.Module):
+    def __init__(self):
+        super(Resnet34Grayscale, self).__init__()
+        resnet34 = models.resnet34(pretrained=True)
+        # TODO: modify resnet18 to grayscale
+
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        with torch.no_grad():
+            self.conv1.weight = nn.Parameter(resnet34.conv1.weight.sum(dim=1, keepdim=True))
+
+        # Copy all layers except the first conv and fc
+        self.backbone = nn.Sequential(*list(resnet34.children())[1:-1])
 
         # Fully connected layer for regression
         self.fc = nn.Linear(512, 136)
