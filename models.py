@@ -138,3 +138,61 @@ class Resnet34Grayscale(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
+
+
+
+from transformers import AutoImageProcessor, AutoModel
+class DINOv2Keypoint(nn.Module):
+    def __init__(self, model_name='facebook/dinov2-base', num_keypoints=68):
+        super(DINOv2Keypoint, self).__init__()
+        self.processor = AutoImageProcessor.from_pretrained(model_name)
+        self.backbone = AutoModel.from_pretrained(model_name)
+        self.hidden_dim = self.backbone.config.hidden_size  # usually 768
+
+        # Keypoint regression head
+        self.head = nn.Sequential(
+            nn.LayerNorm(self.hidden_dim),
+            nn.Linear(self.hidden_dim, num_keypoints * 2)
+        )
+
+    def forward(self, x):
+        # x: [B, 1, 224, 224] -> [B, 3, 224, 224]
+        x = x.repeat(1, 3, 1, 1)
+        outputs = self.backbone(pixel_values=x).last_hidden_state  # [B, num_patches, hidden]
+        cls_token = outputs[:, 0]  # Use CLS token
+        out = self.head(cls_token)
+        return out
+
+class UNetKeypoint(nn.Module):
+    def __init__(self, in_channels=1, out_channels=68):
+        super(UNetKeypoint, self).__init__()
+
+        def CBR(in_ch, out_ch):
+            return nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True)
+            )
+
+        self.enc1 = CBR(in_channels, 64)
+        self.enc2 = CBR(64, 128)
+        self.enc3 = CBR(128, 256)
+        self.pool = nn.MaxPool2d(2)
+
+        self.dec3 = CBR(256 + 128, 128)
+        self.dec2 = CBR(128 + 64, 64)
+        self.final = nn.Conv2d(64, out_channels, 1)
+
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+
+    def forward(self, x):
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool(e1))
+        e3 = self.enc3(self.pool(e2))
+
+        d3 = self.up(e3)
+        d3 = self.dec3(torch.cat([d3, e2], dim=1))
+        d2 = self.up(d3)
+        d2 = self.dec2(torch.cat([d2, e1], dim=1))
+        out = self.final(d2)
+        return out
