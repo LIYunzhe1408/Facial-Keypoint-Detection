@@ -25,3 +25,11 @@ In this part, we implemented a simple CNN architecture to directly regress the c
      * Adam: fast convergence, less tuning.
      * SGD + momentum: may generalize better, needs learning rate scheduling.
 
+## Workflow
+1. Get dataset, split them into train, val, and test.
+2. Define models.
+3. Determine hyperparameters.
+4. Train and val while training. Save best checkpoint, train_loss, val_loss `list`.
+5. Plot training and val loss.
+6. Load saved best model checkpoint. Run metric.
+7. Load saved best model checkpoint. Run prediction, then visualize.
