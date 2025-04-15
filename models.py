@@ -6,145 +6,61 @@ import torch.nn.functional as F
 import torch.nn.init as I
 from torchvision import models
 
-# class SimpleNet(nn.Module):
-#     def __init__(self):
-#         super(SimpleNet, self).__init__()
-
-#         # input image : 1 x 224 x 224, grayscale squared images
-
-#         self.conv1 = nn.Conv2d(1, 32, 4)  # 32*(4,4) filter ==> 221*221*32
-#         self.bn1 = nn.BatchNorm2d(32)
-#         self.pool1 = nn.MaxPool2d(2, 2)  # pool (2,2) ==> 110*110*32
-#         self.dropout1 = nn.Dropout(p=0.1)
-
-#         # TODO: add more layers
-#         self.conv2 = nn.Conv2d(32, 64, 3)       # 64 x 108 x 108
-#         self.bn2 = nn.BatchNorm2d(64)
-#         self.pool2 = nn.MaxPool2d(2, 2)         # 64 x 54 x 54
-#         self.dropout2 = nn.Dropout(p=0.2)
-
-#         self.conv3 = nn.Conv2d(64, 128, 3)      # 128 x 52 x 52
-#         self.bn3 = nn.BatchNorm2d(128)
-#         self.pool3 = nn.MaxPool2d(2, 2)         # 128 x 26 x 26
-#         self.dropout3 = nn.Dropout(p=0.3)
-
-#         self.conv4 = nn.Conv2d(128, 256, 3)     # 256 x 24 x 24
-#         self.bn4 = nn.BatchNorm2d(256)
-#         self.pool4 = nn.MaxPool2d(2, 2)         # 256 x 12 x 12
-#         self.dropout4 = nn.Dropout(p=0.4)
-
-#         self.fc1 = nn.Linear(256 * 12 * 12, 1000)
-#         self.fc2 = nn.Linear(1000, 1000)
-#         self.fc3 = nn.Linear(1000, 136)
-
-#         I.xavier_uniform_(self.fc1.weight.data)
-#         I.xavier_uniform_(self.fc2.weight.data)
-#         I.xavier_uniform_(self.fc3.weight.data)
-
-#     def forward(self, x):
-        
-#         # TODO: implement forward pass
-#         x = self.pool1(nn.ReLU()(self.bn1(self.conv1(x))))
-#         x = self.dropout1(x)
-
-#         x = self.pool2(nn.ReLU()(self.bn2(self.conv2(x))))
-#         x = self.dropout2(x)
-
-#         x = self.pool3(nn.ReLU()(self.bn3(self.conv3(x))))
-#         x = self.dropout3(x)
-
-#         x = self.pool4(nn.ReLU()(self.bn4(self.conv4(x))))
-#         x = self.dropout4(x)
-
-#         x = x.view(x.size(0), -1)
-
-#         x = nn.ReLU()(self.fc1(x))
-#         x = nn.ReLU()(self.fc2(x))
-#         x = self.fc3(x)
-
-#         return x
-
 class SimpleNet(nn.Module):
-    """
-    A deeper VGG-like face keypoint regressor.
-    Input:  1 x 224 x 224  (grayscale)
-    Output: N x 136        (e.g. 68 keypoints x 2 coords each)
-    """
-    def __init__(self, num_keypoints=136):
+    def __init__(self):
         super(SimpleNet, self).__init__()
 
-        # Feature extractor (conv + batchnorm + relu + pool)
-        # 1) 1 -> 32
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2,2)   # 224 -> 112
-        )
+        # input image : 1 x 224 x 224, grayscale squared images
 
-        # 2) 32 -> 64
-        self.conv2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2,2)   # 112 -> 56
-        )
+        self.conv1 = nn.Conv2d(1, 32, 4)  # 32*(4,4) filter ==> 221*221*32
+        self.bn1 = nn.BatchNorm2d(32)
+        self.pool1 = nn.MaxPool2d(2, 2)  # pool (2,2) ==> 110*110*32
+        self.dropout1 = nn.Dropout(p=0.1)
 
-        # 3) 64 -> 128
-        self.conv3 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2,2)   # 56 -> 28
-        )
+        # TODO: add more layers
+        self.conv2 = nn.Conv2d(32, 64, 3)       # 64 x 108 x 108
+        self.bn2 = nn.BatchNorm2d(64)
+        self.pool2 = nn.MaxPool2d(2, 2)         # 64 x 54 x 54
+        self.dropout2 = nn.Dropout(p=0.2)
 
-        # 4) 128 -> 256
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2,2)   # 28 -> 14
-        )
+        self.conv3 = nn.Conv2d(64, 128, 3)      # 128 x 52 x 52
+        self.bn3 = nn.BatchNorm2d(128)
+        self.pool3 = nn.MaxPool2d(2, 2)         # 128 x 26 x 26
+        self.dropout3 = nn.Dropout(p=0.3)
 
-        # 5) 256 -> 512
-        self.conv5 = nn.Sequential(
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2,2)   # 14 -> 7
-        )
+        self.conv4 = nn.Conv2d(128, 256, 3)     # 256 x 24 x 24
+        self.bn4 = nn.BatchNorm2d(256)
+        self.pool4 = nn.MaxPool2d(2, 2)         # 256 x 12 x 12
+        self.dropout4 = nn.Dropout(p=0.4)
 
-        # 6) 512 -> 512
-        self.conv6 = nn.Sequential(
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2,2)   # 7 -> 3 (floor)
-        )
+        self.fc1 = nn.Linear(256 * 12 * 12, 1000)
+        self.fc2 = nn.Linear(1000, 1000)
+        self.fc3 = nn.Linear(1000, 136)
 
-        # After 6 pools: feature map is roughly 512 x 3 x 3 = 4608
-        # Classifier / Regressor head:
-        self.fc1 = nn.Linear(512*3*3, 2048)
-        self.fc2 = nn.Linear(2048, num_keypoints)
-
-        # Optional: Xavier init
-        I.xavier_uniform_(self.fc1.weight)
-        I.xavier_uniform_(self.fc2.weight)
+        I.xavier_uniform_(self.fc1.weight.data)
+        I.xavier_uniform_(self.fc2.weight.data)
+        I.xavier_uniform_(self.fc3.weight.data)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
+        
+        # TODO: implement forward pass
+        x = self.pool1(nn.ReLU()(self.bn1(self.conv1(x))))
+        x = self.dropout1(x)
 
-        # Flatten
+        x = self.pool2(nn.ReLU()(self.bn2(self.conv2(x))))
+        x = self.dropout2(x)
+
+        x = self.pool3(nn.ReLU()(self.bn3(self.conv3(x))))
+        x = self.dropout3(x)
+
+        x = self.pool4(nn.ReLU()(self.bn4(self.conv4(x))))
+        x = self.dropout4(x)
+
         x = x.view(x.size(0), -1)
 
-        # Two FC layers
         x = nn.ReLU()(self.fc1(x))
-        x = self.fc2(x)
+        x = nn.ReLU()(self.fc2(x))
+        x = self.fc3(x)
 
         return x
 
