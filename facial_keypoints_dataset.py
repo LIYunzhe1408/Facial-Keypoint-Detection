@@ -88,50 +88,103 @@ class FacialKeypointsHeatmapDataset(Dataset):
         sample["heatmaps"] = heatmaps
         
         return sample
-
-    
-    def generate_heatmaps(self, keypoints):
-        """
-        Generate heatmaps for each keypoint
-        Args:
-            keypoints: Tensor or numpy array of shape (68, 2) for 68 keypoints with (x, y) coordinates
-        Returns:
-            heatmaps: Tensor of shape (68, output_size, output_size)
-        """
-        # Convert keypoints to numpy if it's a tensor
-        if isinstance(keypoints, torch.Tensor):
-            keypoints = keypoints.numpy()
         
-        num_keypoints = keypoints.shape[0]
-        heatmaps = np.zeros((num_keypoints, self.output_size, self.output_size), dtype=np.float32)
+    def generate_heatmaps(self, keypoints):
+      """
+      Generate heatmaps for each keypoint by directly computing a 2D Gaussian
+      at the keypoint's (x, y) location.
+
+      Args:
+          keypoints: Tensor or numpy array of shape (68, 2) for 68 keypoints with (x, y) coordinates
+
+      Returns:
+          heatmaps: Tensor of shape (68, output_size, output_size),
+                    where each channel is a Gaussian bump for one keypoint.
+      """
+      # Convert keypoints to numpy if it's a tensor
+      if isinstance(keypoints, torch.Tensor):
+          keypoints = keypoints.numpy()
+
+      num_keypoints = keypoints.shape[0]
+      heatmaps = np.zeros((num_keypoints, self.output_size, self.output_size), dtype=np.float32)
+
+      # Example scaling: from [-1..1] or [0..1] range to your output_size
+      # (this line depends on your specific coordinate system)
+      keypoints_scaled = keypoints * 50 + 100
+
+      # Create a meshgrid for the pixel coordinates [0..output_size-1]
+      # X.shape, Y.shape => (output_size, output_size)
+      X, Y = np.meshgrid(np.arange(self.output_size), np.arange(self.output_size))
+
+      for i in range(num_keypoints):
+          x_float, y_float = keypoints_scaled[i]
+
+          # Skip if keypoint is invalid
+          if np.isnan(x_float) or np.isnan(y_float):
+              continue
+
+          # Optionally clamp coordinates to stay in bounds
+          x_float = np.clip(x_float, 0, self.output_size - 1)
+          y_float = np.clip(y_float, 0, self.output_size - 1)
+
+          # Compute squared distance from each pixel to the keypoint
+          dist_sq = (X - x_float)**2 + (Y - y_float)**2
+
+          # 2D Gaussian formula: exp(-dist^2 / (2*sigma^2))
+          # self.sigma is your standard deviation
+          gaussian = np.exp(-dist_sq / (2 * (self.sigma**2)))
+
+          # If you want to ensure the heatmap sums to 1:
+          total = gaussian.sum()
+          if total > 0:
+              gaussian /= total
+
+          heatmaps[i] = gaussian
+          non_zero_mask = (heatmaps != 0)
+      return torch.from_numpy(heatmaps)
+    
+    # def generate_heatmaps(self, keypoints):
+    #     """
+    #     Generate heatmaps for each keypoint
+    #     Args:
+    #         keypoints: Tensor or numpy array of shape (68, 2) for 68 keypoints with (x, y) coordinates
+    #     Returns:
+    #         heatmaps: Tensor of shape (68, output_size, output_size)
+    #     """
+    #     # Convert keypoints to numpy if it's a tensor
+    #     if isinstance(keypoints, torch.Tensor):
+    #         keypoints = keypoints.numpy()
+        
+    #     num_keypoints = keypoints.shape[0]
+    #     heatmaps = np.zeros((num_keypoints, self.output_size, self.output_size), dtype=np.float32)
         
        
-        keypoints_scaled = keypoints * 50 + 100
+    #     keypoints_scaled = keypoints * 50 + 100
         
-        # Generate a heatmap for each keypoint
-        for i in range(num_keypoints):
-            # Get the scaled coordinates
-            x, y = keypoints_scaled[i]
+    #     # Generate a heatmap for each keypoint
+    #     for i in range(num_keypoints):
+    #         # Get the scaled coordinates
+    #         x, y = keypoints_scaled[i]
             
-            # Skip if keypoint is invalid
-            if np.isnan(x) or np.isnan(y):
-                continue
+    #         # Skip if keypoint is invalid
+    #         if np.isnan(x) or np.isnan(y):
+    #             continue
             
-            # Convert to int for indexing
-            x_int, y_int = max(0, min(self.output_size-1, int(x))), max(0, min(self.output_size-1, int(y)))
+    #         # Convert to int for indexing
+    #         x_int, y_int = max(0, min(self.output_size-1, int(x))), max(0, min(self.output_size-1, int(y)))
             
-            # Create a single hot pixel
-            heatmap = np.zeros((self.output_size, self.output_size), dtype=np.float32)
-            heatmap[y_int, x_int] = 1.0
+    #         # Create a single hot pixel
+    #         heatmap = np.zeros((self.output_size, self.output_size), dtype=np.float32)
+    #         heatmap[y_int, x_int] = 1.0
             
-            # Apply gaussian filter to create a soft heatmap
-            heatmap = gaussian_filter(heatmap, sigma=self.sigma)
-            heatmap = heatmap/heatmap.max()
+    #         # Apply gaussian filter to create a soft heatmap
+    #         heatmap = gaussian_filter(heatmap, sigma=self.sigma)
+    #         heatmap = heatmap/heatmap.max()
             
-            # Normalize heatmap to 0-1 range
-            if heatmap.max() > 0:
-                heatmap = heatmap / heatmap.max()
+    #         # Normalize heatmap to 0-1 range
+    #         if heatmap.max() > 0:
+    #             heatmap = heatmap / heatmap.max()
                 
-            heatmaps[i] = heatmap
+    #         heatmaps[i] = heatmap
         
-        return torch.from_numpy(heatmaps)
+    #     return torch.from_numpy(heatmaps)
