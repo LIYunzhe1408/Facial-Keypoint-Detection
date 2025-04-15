@@ -163,36 +163,136 @@ class DINOv2Keypoint(nn.Module):
         out = self.head(cls_token)
         return out
 
-class UNetKeypoint(nn.Module):
-    def __init__(self, in_channels=1, out_channels=68):
-        super(UNetKeypoint, self).__init__()
+class Conv(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, stride=1)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activate = nn.GELU()
 
-        def CBR(in_ch, out_ch):
-            return nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, 3, padding=1),
-                nn.BatchNorm2d(out_ch),
-                nn.ReLU(inplace=True)
-            )
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.activate(self.bn(self.conv(x)))
 
-        self.enc1 = CBR(in_channels, 64)
-        self.enc2 = CBR(64, 128)
-        self.enc3 = CBR(128, 256)
-        self.pool = nn.MaxPool2d(2)
 
-        self.dec3 = CBR(256 + 128, 128)
-        self.dec2 = CBR(128 + 64, 64)
-        self.final = nn.Conv2d(64, out_channels, 1)
+class DownConv(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, stride=2)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activate = nn.GELU()
 
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.activate(self.bn(self.conv(x)))
 
-    def forward(self, x):
-        e1 = self.enc1(x)
-        e2 = self.enc2(self.pool(e1))
-        e3 = self.enc3(self.pool(e2))
+class UpConv(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.upconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, padding=1, stride=2)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activate = nn.GELU()
 
-        d3 = self.up(e3)
-        d3 = self.dec3(torch.cat([d3, e2], dim=1))
-        d2 = self.up(d3)
-        d2 = self.dec2(torch.cat([d2, e1], dim=1))
-        out = self.final(d2)
-        return out
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.activate(self.bn(self.upconv(x)))
+
+
+class Flatten(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.pool = nn.AvgPool2d(kernel_size=7)
+        self.activation = nn.GELU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.pool(x)).view(x.size(0), -1)
+
+
+class Unflatten(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.convTrans = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=7, stride=7, padding=0)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.activate = nn.GELU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.view(x.size(0), -1, 1, 1)
+        return self.activate(self.bn(self.convTrans(x)))
+
+
+# Block
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.conv1 = Conv(in_channels, out_channels)
+        self.conv2 = Conv(out_channels, out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.conv1(x)
+        return self.conv2(x)
+
+
+class DownBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.downConv = DownConv(in_channels, out_channels)
+        self.conv_block = ConvBlock(out_channels, out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.downConv(x)
+        return self.conv_block(x)
+
+
+class UpBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.upconv = UpConv(in_channels, out_channels)
+        self.conv_block = ConvBlock(out_channels, out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.upconv(x)
+        return self.conv_block(x)
+
+class UnconditionalUNet(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        num_hiddens: int,
+    ):
+        super().__init__()
+        self.initial_conv = ConvBlock(in_channels, num_hiddens)
+
+        self.down1 = DownBlock(num_hiddens, num_hiddens)  # 28x28 -> 14x14
+        self.down2 = DownBlock(num_hiddens, num_hiddens * 2)  # 14x14 -> 7x7
+
+        self.flatten = Flatten()
+        self.unflatten = Unflatten(num_hiddens * 2, num_hiddens * 2)
+
+        self.up2 = UpBlock(num_hiddens * 4, num_hiddens)
+        self.up1 = UpBlock(num_hiddens * 2, num_hiddens)
+        self.last_to_second = ConvBlock(num_hiddens * 2, num_hiddens)
+        # self.final_conv = nn.Conv2d(num_hiddens, in_channels, kernel_size=3, padding=1)
+        self.final_conv = nn.Conv2d(num_hiddens, 68, kernel_size=3, padding=1)
+
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        assert x.shape[-2:] == (224, 224), "Expect input shape to be (224, 224)."
+
+        x_init = self.initial_conv(x)
+        x1 = self.down1(x_init)
+        x2 = self.down2(x1)
+
+        latent = self.flatten(x2)  # (B, num_hiddens*4, 1, 1)
+        latent = self.unflatten(latent)  # (B, num_hiddens*4, 7, 7)
+        # print("latent_unflattened: ", latent.shape)
+
+        con = torch.cat([latent, x2], dim=1)  # Concatenation with downsampled feature map
+        x = self.up2(con)  # (B, num_hiddens*2, 14, 14)
+
+
+        con = torch.cat([x, x1], dim=1)  # Concatenation with initial feature map
+        x = self.up1(con)  # (B, num_hiddens, 28, 28)
+
+
+        con = torch.cat([x, x_init], dim=1)  # Concatenation with initial feature map
+        x = self.last_to_second(con)  # (B, num_hiddens, 28, 28)
+        x = self.final_conv(x)  # Final convolution
+
+        return x
