@@ -173,6 +173,16 @@ class Resnet34(nn.Module):
         x = self.resnet34(x)
         return x
 
+class Resnet50(nn.Module):
+    def __init__(self):
+        super(Resnet50, self).__init__()
+        self.resnet50 = models.resnet50(pretrained=True)
+        n_inputs = self.resnet50.fc.in_features
+        self.resnet50.fc = nn.Linear(n_inputs, 136)
+
+    def forward(self, x):
+        x = self.resnet50(x)
+        return x
 
 class Resnet18Grayscale(nn.Module):
     def __init__(self):
@@ -223,6 +233,30 @@ class Resnet34Grayscale(nn.Module):
         x = self.fc(x)
         return x
 
+
+class Resnet50Grayscale(nn.Module):
+    def __init__(self):
+        super(Resnet50Grayscale, self).__init__()
+        resnet50 = models.resnet50(pretrained=True)
+        # TODO: modify resnet18 to grayscale
+
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        with torch.no_grad():
+            self.conv1.weight = nn.Parameter(resnet50.conv1.weight.sum(dim=1, keepdim=True))
+
+        # Copy all layers except the first conv and fc
+        self.backbone = nn.Sequential(*list(resnet50.children())[1:-1])
+
+        # Fully connected layer for regression
+        self.fc = nn.Linear(512, 136)
+
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.backbone(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
 
 
 from transformers import AutoImageProcessor, AutoModel
