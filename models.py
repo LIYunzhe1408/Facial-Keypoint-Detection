@@ -164,7 +164,7 @@ class Resnet50Grayscale(nn.Module):
         self.backbone = nn.Sequential(*list(resnet50.children())[1:-1])
 
         # Fully connected layer for regression
-        self.fc = nn.Linear(512, 136)
+        self.fc = nn.Linear(2048, 136)
 
 
     def forward(self, x):
