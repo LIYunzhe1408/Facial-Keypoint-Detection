@@ -33,3 +33,13 @@ In this part, we implemented a simple CNN architecture to directly regress the c
 5. Plot training and val loss.
 6. Load saved best model checkpoint. Run metric.
 7. Load saved best model checkpoint. Run prediction, then visualize.
+
+## TODO
+1. Refine the training process for ResNet50 backbone. Current one for ResNet34 works not well even training for 100 epochs.
+   * Learning rate for classifier when backbone is frozen and for entire model.
+   * Scheduler?
+   * Epochs
+2. Adapt it to DiNO
+3. Train more epochs for UNet
+   * Sigma
+   * Learning rate
